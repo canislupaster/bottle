@@ -1,12 +1,13 @@
-use serenity;
+use serenity::{self, prelude::TypeMapKey};
 use typemap::Key;
 use chrono;
-use oauth2;
+use oauth2::basic::BasicClient;
 pub use std::error::Error;
 use uuid::Uuid;
 use diesel::prelude::*;
 use diesel::r2d2::ConnectionManager;
 use r2d2::{Pool, PooledConnection};
+use serde_derive::{Serialize, Deserialize};
 use std::sync::Arc;
 
 use super::schema::*;
@@ -160,6 +161,8 @@ pub struct Config {
     pub client_secret: String,
     pub database_url: String,
     pub host_url: String,
+    pub host_domain: String,
+    pub host_path: String,
     pub admin_channel: i64,
     pub ban_emoji: String,
     pub delete_emoji: String,
@@ -207,23 +210,31 @@ impl Key for DConfig {
     type Value = Config;
 }
 
+impl TypeMapKey for DConfig {
+    type Value = Config;
+}
+
 pub struct DOauth2;
+impl TypeMapKey for DOauth2 {
+    type Value = BasicClient;
+}
+
 impl Key for DOauth2 {
-    type Value = oauth2::Config;
+    type Value = BasicClient;
 }
 
 pub struct DBots;
-impl Key for DBots {
+impl TypeMapKey for DBots {
     type Value = Arc<discord_bots::Client>;
 }
 
 pub trait GetConfig {
-    fn get_cfg(&self) -> Config;
+    fn get_cfg(&self) -> &Config;
 }
 
 impl GetConfig for serenity::prelude::Context {
-    fn get_cfg(&self) -> Config {
-        self.data.lock().get::<DConfig>().unwrap().clone()
+    fn get_cfg(&self) -> &Config {
+        self.data.blocking_read().get::<DConfig>().unwrap()
     }
 }
 
@@ -252,7 +263,7 @@ impl GetConnection for Pool<ConnectionManager<PgConnection>> {
 
 impl GetConnection for serenity::prelude::Context {
     fn get_pool(&self) -> ConnPool {
-        self.data.lock().get::<DConn>().unwrap().get_pool()
+        self.data.blocking_read().get::<DConn>().unwrap().get_pool()
     }
 }
 
@@ -262,7 +273,7 @@ pub trait GetBots {
 
 impl GetBots for serenity::prelude::Context {
     fn get_bots(&self) -> Arc<discord_bots::Client> {
-        self.data.lock().get::<DBots>().unwrap().clone()
+        self.data.blocking_read().get::<DBots>().unwrap().clone()
     }
 }
 

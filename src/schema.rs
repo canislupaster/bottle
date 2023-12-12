@@ -1,3 +1,5 @@
+use diesel::prelude::*;
+
 table! {
     ban (user) {
         report -> Nullable<Int8>,

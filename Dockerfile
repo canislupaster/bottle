@@ -1,7 +1,7 @@
 # thanks https://whitfin.io/speeding-up-rust-docker-builds/
 
 # select build image
-FROM rust:1.34.1 as build
+FROM rust:bookworm as build
 
 # create a new empty shell project
 RUN USER=root cargo new --bin bottle
@@ -21,13 +21,14 @@ COPY ./src ./src
 COPY ./migrations ./migrations
 
 # build for release
-RUN rm ./target/release/deps/bottle*
-RUN cargo build --release
+RUN touch src/main.rs && cargo build --release
 
 # our final base
-FROM rust:1.30.1
+FROM rust:bookworm
 
 WORKDIR /bottle
+
+RUN apt install libpq-dev
 
 # copy the build artifact from the build stage
 COPY --from=build /bottle/target/release/bottle ./bottle

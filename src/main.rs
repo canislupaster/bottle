@@ -1,16 +1,12 @@
-#![allow(proc_macro_derive_resolution_fallback)]
 extern crate time;
 extern crate chrono;
 extern crate r2d2;
 extern crate uuid;
-#[macro_use]
 extern crate diesel;
 #[cfg(not(debug_assertions))]
-#[macro_use]
 extern crate diesel_migrations;
 extern crate serde;
 extern crate serde_json;
-#[macro_use]
 extern crate serde_derive;
 extern crate kankyo;
 extern crate envy;
@@ -19,7 +15,6 @@ extern crate discord_bots;
 extern crate serenity;
 
 extern crate simple_logging;
-#[macro_use]
 extern crate log;
 
 extern crate iron;
@@ -30,7 +25,8 @@ extern crate router;
 extern crate params;
 extern crate oauth2;
 extern crate reqwest;
-extern crate iron_sessionstorage_0_6;
+extern crate cookie;
+extern crate futures_lite;
 
 pub mod schema;
 pub mod data;
@@ -41,7 +37,8 @@ pub mod bottle;
 
 use std::thread;
 use std::fs::File;
-use std::sync::{Arc};
+use std::sync::Arc;
+use log::*;
 use diesel::pg::PgConnection;
 use diesel::r2d2::ConnectionManager;
 
@@ -50,7 +47,6 @@ use serenity::framework::standard::{CommandError, DispatchError, StandardFramewo
 use serenity::model::channel::{Message, Channel, Reaction};
 use serenity::model::gateway;
 use serenity::model::permissions::Permissions;
-use serenity::CACHE as cache;
 
 use model::*;
 use model::id::*;
@@ -68,7 +64,7 @@ fn update_guilds(ctx: &Context) {
 
 struct Handler;
 impl EventHandler for Handler {
-    fn message(&self, ctx: Context, new_message: Message) {
+    async fn message(&self, ctx: Context, new_message: Message) {
         if !new_message.author.bot {
             let conn = ctx.get_conn();
 
@@ -98,27 +94,27 @@ impl EventHandler for Handler {
         }
     }
 
-    fn message_delete(&self, ctx: Context, _channel: serenity::model::id::ChannelId, deleted_msg_id: serenity::model::id::MessageId) {
+    async fn message_delete(&self, ctx: Context, _channel: serenity::model::id::ChannelId, deleted_msg_id: serenity::model::id::MessageId) {
         debug!("Message {} deleted, checking db...", deleted_msg_id);
-        let conn = &ctx.get_conn();
-        if let Ok(x) = Bottle::get_from_message(deleted_msg_id.as_i64(), conn) {
+        let conn = ctx.get_conn();
+        if let Ok(x) = Bottle::get_from_message(deleted_msg_id.as_i64(), &mut conn) {
             bottle::del_bottle(x, conn, &ctx.get_cfg()).unwrap();
         }
     }
 
     fn reaction_add(&self, ctx: Context, r: Reaction) {
-        let conn = &ctx.get_conn();
-        bottle::react(conn, r, true, &ctx.get_cfg()).unwrap();
+        let conn = ctx.get_conn();
+        bottle::react(&mut conn, r, true, &ctx.get_cfg()).unwrap();
     }
 
     fn reaction_remove(&self, ctx: Context, r: Reaction) {
-        let conn = &ctx.get_conn();
-        bottle::react(conn, r, false, &ctx.get_cfg()).unwrap();
+        let conn = ctx.get_conn();
+        bottle::react(&mut conn, r, false, &ctx.get_cfg()).unwrap();
     }
 
-    fn guild_create (&self, ctx: Context, guild: serenity::model::guild::Guild, is_new: bool) {
+    fn guild_create(&self, ctx: Context, guild: serenity::model::guild::Guild, is_new: bool) {
         let conn = ctx.get_conn();
-        let guilddata = Guild::get(guild.id.as_i64(), &conn);
+        let guilddata = Guild::get(guild.id.as_i64(), &mut conn);
         let user = cache.read().user.id.clone();
 
         if is_new {
@@ -131,7 +127,7 @@ impl EventHandler for Handler {
             }
         }
 
-        guilddata.update(&conn).unwrap();
+        guilddata.update(&mut conn).unwrap();
         update_guilds(&ctx);
         info!("Gained guild {}.", &guild.name)
     }

@@ -11,6 +11,7 @@ use model::id::*;
 use model;
 use model::*;
 use diesel::sql_types::BigInt;
+use log::*;
 
 pub fn col_wheel(num: usize) -> Colour {
     match num%8 {
@@ -25,8 +26,8 @@ pub fn col_wheel(num: usize) -> Colour {
     }
 }
 
-pub fn render_bottle (bottle: &Bottle, edit: Option<MessageId>, mut level: usize, in_reply: bool, channel: ChannelId, cfg:&Config) -> Res<Message> {
-    channel.broadcast_typing()?;
+pub async fn render_bottle(bottle: &Bottle, edit: Option<MessageId>, mut level: usize, in_reply: bool, channel: ChannelId, cfg:&Config) -> Res<Message> {
+    channel.broadcast_typing().await?;
 
     if in_reply {
         level += 1;
@@ -36,7 +37,8 @@ pub fn render_bottle (bottle: &Bottle, edit: Option<MessageId>, mut level: usize
         let e = serenity::builder::CreateEmbed::default();
 
         if bottle.deleted {
-            return Ok(e.title(format!("BOTTLE FROM {} IS DELETED", get_user_name(bottle.user))).description("This bottle has been deleted."));
+            e.title(format!("BOTTLE FROM {} IS DELETED", get_user_name(bottle.user))).description("This bottle has been deleted.");
+            return Ok(e);
         }
 
         let title = if level > 0 { "You have found a message glued to the bottle!" } else { "You have recovered a bottle!" }; //TODO: better reply system, takes last bottle as an argument
@@ -52,7 +54,7 @@ pub fn render_bottle (bottle: &Bottle, edit: Option<MessageId>, mut level: usize
             extra_info.push_str(&format!(" [Guild]({})", guild_url(x, cfg)))
         }
 
-        let mut e = e.title(title)
+        e.title(title)
             .description(format!("{}{} [Report]({})", bottle.contents, extra_info, report_url(bottle.id, cfg)))
             .timestamp(&DateTime::<Utc>::from_utc(bottle.time_pushed, Utc))
             .color(col_wheel(level))
@@ -84,11 +86,11 @@ pub fn render_bottle (bottle: &Bottle, edit: Option<MessageId>, mut level: usize
             });
 
         if let Some(img) = &bottle.image {
-            e = e.image(img).url(img);
+            e.image(img).url(img);
         }
 
         if let Some(url) = &bottle.url {
-            e = e.url(url);
+            e.url(url);
         }
 
         Ok(e)
@@ -379,5 +381,5 @@ pub fn new_bottle<'a, 'b>(new_msg: &'a Message, guild: Option<model::GuildId>, c
         let _ = distribute_bottle(&bottle, &connpool.get_conn(), &cfg);
     });
 
-    Ok(Some("Your message has been ~~discarded~~ pushed into the dark seas of discord!".into()))
+    Ok(Some("Your message has been cast away!".into()))
 }
